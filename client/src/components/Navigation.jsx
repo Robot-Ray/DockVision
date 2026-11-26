@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import "../NavBar.css";
+import logo from "../assets/logo2.png";
 
 const API_BASE_URL = "/api/auth";
 
@@ -99,7 +100,7 @@ const Navigation = () => {
     <nav className="nav-bar">
       <div className="nav-logo">
         <Link to="/">
-          <img src="/src/assets/logo.png" alt="Logo" />
+          <img src={logo} alt="DockVision" />
         </Link>
       </div>
 
