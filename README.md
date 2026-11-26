@@ -272,6 +272,13 @@ automated tests intentionally use a fake transport instead of sending mail.
 
 Run the schema file against the same database you configured
 
+Existing databases must also apply each newer numbered migration. For the
+Stay Signed In session-persistence support, run:
+
+```powershell
+psql -d $env:DB_NAME -f server/db/migration-002-session-persistence.sql
+```
+
 The normal automated server tests do not write to this configured database. The
 PostgreSQL integration tests create a uniquely named temporary database, load
 the schema, run constraint and transaction checks, and drop that temporary
@@ -350,7 +357,7 @@ the backend health check should respond at `http://localhost:5000/api/health`
   enter the version without a leading `v` (for example, `0.1.0`). After the first
   publication, set the `dockvision-windows-base` package visibility to public so
   normal setup can pull it without registry credentials.
-- If registration or login fails on a new setup, make sure PostgreSQL is running and that `server/db/schema.sql` has been applied.
+- If registration or login fails on a new setup, make sure PostgreSQL is running, `server/db/schema.sql` has been applied, and existing databases have applied the numbered migrations in `server/db`.
 - Forgot-password requests return a configuration error until valid server-only
   `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, and `CLIENT_URL`
   values are configured. The backend does not use browser-provided mail or

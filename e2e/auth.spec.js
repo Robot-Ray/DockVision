@@ -75,6 +75,15 @@ async function signIn(page, submittedPassword = password) {
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
+/** @param {import('@playwright/test').Page} page */
+async function signInWithStaySignedIn(page) {
+  await page.goto('/login');
+  await page.getByPlaceholder('Email').fill(email);
+  await page.getByPlaceholder('Password').fill(password);
+  await page.getByLabel('Stay Signed In').check();
+  await page.getByRole('button', { name: 'Sign in' }).click();
+}
+
 /**
  * @param {import('@playwright/test').Page} page
  * @param {import('@playwright/test').BrowserContext} context
@@ -95,6 +104,17 @@ test('succesful sign in survies page reload', async ({ page }) => { // Test that
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+test('Stay Signed In submits the persistent-session preference', async ({ page }) => {
+  const loginRequest = page.waitForRequest('**/api/auth/login');
+  await signInWithStaySignedIn(page);
+  expect((await loginRequest).postDataJSON()).toMatchObject({
+    email,
+    password,
+    rememberMe: true,
+  });
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 

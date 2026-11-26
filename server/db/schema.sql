@@ -18,7 +18,8 @@ CREATE TABLE sessions (
   user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   session_token TEXT UNIQUE NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires_at TIMESTAMP NOT NULL
+  expires_at TIMESTAMP NOT NULL,
+  is_persistent BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
@@ -61,4 +62,4 @@ CREATE TABLE account_deletion_jobs (
 
 CREATE INDEX idx_account_deletion_jobs_status ON account_deletion_jobs(status);
 
--- Existing installations should apply server/db/migration-001-account-deletion.sql.
+-- Existing installations should apply the numbered migration files in this directory.

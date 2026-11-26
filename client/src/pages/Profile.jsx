@@ -858,21 +858,23 @@ export default function Profile() {
                             Automatic export: {exportDestination?.enabled ? "Enabled" : "Disabled"}
                         </p>
 
-                        <button
-                            type="button"
-                            onClick={handleChangeExportFolder}
-                            disabled={isUpdatingExport}
-                        >
-                            Choose or change export folder
-                        </button>
-                        
-                        <button
-                            type="button"
-                            onClick={handleDisableExport}
-                            disabled={isUpdatingExport || !exportDestination?.enabled}
-                        >
-                            Disable automatic export
-                        </button>
+                        <div className="profile-actions">
+                            <button
+                                type="button"
+                                onClick={handleChangeExportFolder}
+                                disabled={isUpdatingExport}
+                            >
+                                Choose or change export folder
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleDisableExport}
+                                disabled={isUpdatingExport || !exportDestination?.enabled}
+                            >
+                                Disable automatic export
+                            </button>
+                        </div>
 
                         {exportMessage && <p role="status">{exportMessage}</p>}
                     </section>

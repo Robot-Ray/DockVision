@@ -172,7 +172,7 @@ Owned filesystem runs are requested to cancel first. Cleanup removes an owned ru
 only after its aggregate status is terminal. Ownerless legacy runs and runs owned
 by another account are preserved. Cleanup is retry-safe for completed run-folder
 removal and records a failed/pending job when a run has not reached a terminal
-state. Existing databases must apply `server/db/migration-001-account-deletion.sql`.
+state. Existing databases must apply the applicable numbered migrations in `server/db`.
 
 The current implementation does not provide distributed locking across multiple
 backend processes, and it does not prove guest process termination beyond the

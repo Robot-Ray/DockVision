@@ -55,6 +55,7 @@ async function startAuthApp(t, options = {}) {
         sessions.set(token, {
           user_id: values[0],
           expires_at: options.sessionExpired ? new Date("2000-01-01T00:00:00.000Z") : new Date("2099-01-01T00:00:00.000Z"),
+          is_persistent: sql.includes("TRUE") ? true : Boolean(values[2]),
         });
         return { rows: [] };
       }
@@ -98,7 +99,7 @@ async function startAuthApp(t, options = {}) {
         const renewable = session && session.expires_at > new Date() && session.expires_at <= new Date(Date.now() + 60 * 60 * 1000);
         if (!renewable) return { rowCount: 0, rows: [] };
         session.expires_at = new Date(Date.now() + 2 * 60 * 60 * 1000);
-        return { rowCount: 1, rows: [] };
+        return { rowCount: 1, rows: [{ is_persistent: session.is_persistent }] };
       }
 
       return { rows: [] };
@@ -151,8 +152,12 @@ async function startAuthApp(t, options = {}) {
   return {
     db,
     base: () => `http://127.0.0.1:${server.address().port}`,
-    addSession(token, expiresAt) {
-      sessions.set(token, { user_id: user.user_id, expires_at: new Date(expiresAt) });
+    addSession(token, expiresAt, isPersistent = false) {
+      sessions.set(token, {
+        user_id: user.user_id,
+        expires_at: new Date(expiresAt),
+        is_persistent: isPersistent,
+      });
     },
   };
 }
@@ -281,16 +286,31 @@ test("registration enforces the agreed name, email, symbol, and confirmation bou
   }
 });
 
-test("login creates a session for valid credentials and rejects invalid credentials", async (t) => {
+test("login creates session-only cookies by default and persistent cookies when requested", async (t) => {
   const fixture = await startAuthApp(t);
-  const valid = await fetch(`${fixture.base()}/api/auth/login`, {
+  const sessionOnly = await fetch(`${fixture.base()}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: " TEST@EXAMPLE.COM ", password: PASSWORD }),
   });
-  assert.equal(valid.status, 200);
-  assert.deepEqual((await valid.json()).user.email, "test@example.com");
-  assert.match(valid.headers.get("set-cookie"), /session_token=/);
+  assert.equal(sessionOnly.status, 200);
+  assert.deepEqual((await sessionOnly.json()).user.email, "test@example.com");
+  assert.match(sessionOnly.headers.get("set-cookie"), /session_token=/);
+  assert.doesNotMatch(sessionOnly.headers.get("set-cookie"), /Max-Age=/i);
+
+  const sessionOnlyToken = [...fixture.db.sessions.keys()][0];
+  assert.equal(fixture.db.sessions.get(sessionOnlyToken).is_persistent, false);
+
+  const persistent = await fetch(`${fixture.base()}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", password: PASSWORD, rememberMe: true }),
+  });
+  assert.equal(persistent.status, 200);
+  assert.match(persistent.headers.get("set-cookie"), /Max-Age=/i);
+
+  const persistentToken = [...fixture.db.sessions.keys()][1];
+  assert.equal(fixture.db.sessions.get(persistentToken).is_persistent, true);
 
   const invalid = await fetch(`${fixture.base()}/api/auth/login`, {
     method: "POST",
@@ -334,19 +354,28 @@ test("expired session cookies are rejected by /me and removed from storage", asy
   assert.equal(fixture.db.sessions.has("expired-token"), false);
 });
 
-test("/me preserves a valid session and renews the same token when one hour remains", async (t) => {
+test("/me preserves each session's cookie persistence when renewing the same token", async (t) => {
   const fixture = await startAuthApp(t);
-  fixture.addSession("renewable-token", new Date(Date.now() + 30 * 60 * 1000).toISOString());
+  fixture.addSession("session-token", new Date(Date.now() + 30 * 60 * 1000).toISOString());
 
-  const response = await fetch(`${fixture.base()}/api/auth/me`, {
-    headers: { Cookie: "session_token=renewable-token" },
+  const sessionResponse = await fetch(`${fixture.base()}/api/auth/me`, {
+    headers: { Cookie: "session_token=session-token" },
   });
 
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).user.user_id, 7);
-  assert.match(response.headers.get("set-cookie"), /session_token=renewable-token/);
-  assert.ok(fixture.db.sessions.get("renewable-token").expires_at > new Date(Date.now() + 60 * 60 * 1000));
-  assert.equal(fixture.db.sessions.has("renewable-token"), true);
+  assert.equal(sessionResponse.status, 200);
+  assert.equal((await sessionResponse.json()).user.user_id, 7);
+  assert.match(sessionResponse.headers.get("set-cookie"), /session_token=session-token/);
+  assert.doesNotMatch(sessionResponse.headers.get("set-cookie"), /Max-Age=/i);
+  assert.ok(fixture.db.sessions.get("session-token").expires_at > new Date(Date.now() + 60 * 60 * 1000));
+
+  fixture.addSession("persistent-token", new Date(Date.now() + 30 * 60 * 1000).toISOString(), true);
+  const persistentResponse = await fetch(`${fixture.base()}/api/auth/me`, {
+    headers: { Cookie: "session_token=persistent-token" },
+  });
+
+  assert.equal(persistentResponse.status, 200);
+  assert.match(persistentResponse.headers.get("set-cookie"), /session_token=persistent-token/);
+  assert.match(persistentResponse.headers.get("set-cookie"), /Max-Age=/i);
 });
 
 test("/me rejects requests without a session token", async (t) => {

@@ -57,14 +57,21 @@ function isStrongPassword(value) {
 
 /**
  * Keep the browser cookie lifetime aligned with the server-side session window.
+ * Session-only cookies intentionally omit maxAge so browsers discard them when
+ * the browser session ends.
  */
-function setSessionCookie(res, sessionToken) {
-  res.cookie("session_token", sessionToken, {
+function setSessionCookie(res, sessionToken, isPersistent) {
+  const options = {
     httpOnly: true,
     secure: false,
     sameSite: "lax",
-    maxAge: SESSION_COOKIE_MAX_AGE_MS,
-  });
+  };
+
+  if (isPersistent) {
+    options.maxAge = SESSION_COOKIE_MAX_AGE_MS;
+  }
+
+  res.cookie("session_token", sessionToken, options);
 }
 
 /**
@@ -114,12 +121,13 @@ module.exports = function authRoutes(db, { deletionService } = {}) {
         SET expires_at = CURRENT_TIMESTAMP + INTERVAL '2 hours'
         WHERE session_token = $1
           AND expires_at > CURRENT_TIMESTAMP
-          AND expires_at <= CURRENT_TIMESTAMP + INTERVAL '1 hour'`,
+          AND expires_at <= CURRENT_TIMESTAMP + INTERVAL '1 hour'
+        RETURNING is_persistent`,
         [token]
       );
 
       if (sessionExtensionResult.rowCount > 0) {
-        setSessionCookie(res, token);
+        setSessionCookie(res, token, sessionExtensionResult.rows[0].is_persistent);
       }
 
       // Read the current authenticated user after any cleanup or renewal.
@@ -233,14 +241,15 @@ module.exports = function authRoutes(db, { deletionService } = {}) {
             user_id,
             session_token,
             created_at,
-            expires_at
+            expires_at,
+            is_persistent
           )
-          VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 hours')`,
+          VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 hours', TRUE)`,
           [user.user_id, sessionToken]
         );
 
         await client.query("COMMIT");
-        setSessionCookie(res, sessionToken);
+        setSessionCookie(res, sessionToken, true);
         return res.status(201).json({ user });
       } catch (error) {
         await client.query("ROLLBACK").catch(() => {});
@@ -266,6 +275,7 @@ module.exports = function authRoutes(db, { deletionService } = {}) {
       const email = normalizeEmail(req.body.email);
       const password =
         typeof req.body.password === "string" ? req.body.password : "";
+      const rememberMe = req.body.rememberMe === true;
 
       if (!email || !password) {
         return res
@@ -376,13 +386,14 @@ module.exports = function authRoutes(db, { deletionService } = {}) {
           user_id,
           session_token,
           created_at,
-          expires_at
+          expires_at,
+          is_persistent
         )
-        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 hours')`,
-        [user.user_id, sessionToken]
+        VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 hours', $3)`,
+        [user.user_id, sessionToken, rememberMe]
       );
 
-      setSessionCookie(res, sessionToken);
+      setSessionCookie(res, sessionToken, rememberMe);
 
       return res.json({
         user: {
